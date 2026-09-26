@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { addMember, dropMember, launchCircle } from "@/lib/actions";
+import { CircleForm } from "../form";
+import { WatchMeetings } from "../watch-meetings";
+import { addMember, dropMember, launchCircle, updateCircleDetails } from "@/lib/actions";
 import { databaseReady, db } from "@/lib/db";
-import { formatWhen, patternLabel, weekdayLabel } from "@/lib/time";
+import { clockLabel, formatWhen, monthDayYear, patternLabel, weekdayLabel } from "@/lib/time";
 
 export default async function CirclePage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sent?: string }>;
+  searchParams: Promise<{ sent?: string; edit?: string }>;
 }) {
   if (!databaseReady()) return <p className="banner">Database key is missing.</p>;
   const { id } = await params;
@@ -25,17 +27,40 @@ export default async function CirclePage({
   const seated = new Set(members.filter((member) => member.status !== "dropped").map((member) => member.person_id));
   const available = people.filter((person) => !seated.has(person.id));
   const active = members.filter((member) => member.status === "active");
+  const waitingForMeetings = query.sent === "launch" && circle.status !== "active";
 
   return (
     <>
+      <Link className="back" href="/circles">
+        ← Circles
+      </Link>
       <p className="kicker">{circle.kind} circle · {circle.status}</p>
-      <h1>{circle.location || `Circle ${circle.id}`}</h1>
+      <div className="title">
+        <h1>{circle.location || `Circle ${circle.id}`}</h1>
+        <Link className="icon" href={query.edit ? `/circles/${circle.id}` : `/circles/${circle.id}?edit=1`} aria-label="Edit circle">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </Link>
+        <Link className="icon" href={`/circles/${circle.id}/delete`} aria-label="Delete circle">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6M14 11v6" />
+          </svg>
+        </Link>
+      </div>
       <p className="lede">
-        {weekdayLabel(circle.weekday)} · {patternLabel(circle.pattern)} · {circle.local_start}–{circle.local_end} · {circle.timezone}
+        {weekdayLabel(circle.weekday)} · {patternLabel(circle.pattern)} · {clockLabel(circle.local_start)}–{clockLabel(circle.local_end)} · {circle.timezone}
         <br />
-        Season {circle.season_start} to {circle.season_end}
+        Season {monthDayYear(circle.season_start)} to {monthDayYear(circle.season_end)}
       </p>
-      {query.sent ? <p className="banner">Sent to n8n. Calendar rows appear after that workflow finishes.</p> : null}
+      {query.edit ? <CircleForm action={updateCircleDetails} people={people} circle={circle} submitLabel="Save circle" /> : null}
+      {waitingForMeetings ? <p className="banner">Circle Launched! Calendar Events will appear shortly.</p> : null}
+      <WatchMeetings active={waitingForMeetings} />
+      {query.sent === "drop" ? <p className="banner">Member dropped.</p> : null}
       <div className="split">
         <div className="cards">
           <article className="card">
@@ -71,7 +96,10 @@ export default async function CirclePage({
             })}
           </article>
           <article className="card">
-            <h2>Meetings</h2>
+            <div className="row" style={{ alignItems: "center" }}>
+              <h2>Meetings</h2>
+              {waitingForMeetings ? <span className="meta">Checking for new meetings</span> : null}
+            </div>
             {meetings.length === 0 ? <p className="meta">None yet. Launch the circle to create them.</p> : null}
             {meetings.map((meeting) => (
               <p key={meeting.id} style={{ marginTop: 10 }}>

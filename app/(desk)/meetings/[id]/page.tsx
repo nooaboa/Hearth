@@ -32,9 +32,10 @@ export default async function MeetingPage({
 
   return (
     <>
-      <p className="kicker">
-        <Link href={`/circles/${circle.id}`}>{circle.location || `Circle ${circle.id}`}</Link>
-      </p>
+      <Link className="back" href={`/circles/${circle.id}`}>
+        ← {circle.location || `Circle ${circle.id}`}
+      </Link>
+      <p className="kicker">Meeting</p>
       <h1>{meeting.title}</h1>
       <p className="lede">
         {formatWhen(meeting.starts_at, zone)} · {meeting.location || circle.location}

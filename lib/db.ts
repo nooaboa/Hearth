@@ -155,6 +155,12 @@ export const db = {
     rest<Feedback[]>(`feedback_responses?meeting_id=eq.${meetingId}&select=*&order=submitted_at.desc`),
   insert: <T>(table: string, body: unknown) =>
     rest<T[]>(table, { method: "POST", body: JSON.stringify(body) }).then((rows) => rows[0]),
+  updatePerson: (id: number, body: unknown) =>
+    rest<Person[]>(`people?id=eq.${id}`, { method: "PATCH", body: JSON.stringify(body) }).then((rows) => rows[0]),
   updateCircle: (id: number, body: unknown) =>
     rest<Circle[]>(`circles?id=eq.${id}`, { method: "PATCH", body: JSON.stringify(body) }).then((rows) => rows[0]),
+  remove: (table: string, id: number) => rest<unknown>(`${table}?id=eq.${id}`, { method: "DELETE" }),
+  removeWhere: (table: string, filter: string) => rest<unknown>(`${table}?${filter}`, { method: "DELETE" }),
+  clearRole: (column: "facilitator_id" | "host_id", personId: number) =>
+    rest<unknown>(`circles?${column}=eq.${personId}`, { method: "PATCH", body: JSON.stringify({ [column]: null }) }),
 };

@@ -18,7 +18,7 @@ export default async function PeoplePage() {
   return (
     <>
       <p className="kicker">People</p>
-      <h1>The room, named.</h1>
+      <h1>Member overview</h1>
       <div className="split" style={{ marginTop: 24 }}>
         <div className="card" style={{ overflowX: "auto" }}>
           <table>

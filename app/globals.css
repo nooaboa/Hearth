@@ -31,6 +31,20 @@ a { color: inherit; text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3 { font-family: var(--serif); font-weight: 560; letter-spacing: -0.03em; margin: 0; }
 h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); line-height: 0.95; }
+.title { display: flex; align-items: center; gap: 14px; }
+a.icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--ink);
+}
+a.icon:hover { background: var(--paper-2); }
 h2 { font-size: 1.7rem; }
 p { margin: 0; }
 
@@ -62,7 +76,7 @@ p { margin: 0; }
 .kicker { color: var(--ember-deep); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 8px; }
 .lede { color: var(--ink-soft); max-width: 46rem; margin: 12px 0 28px; }
 .grid { display: grid; gap: 16px; }
-.cards { display: grid; gap: 14px; }
+.cards { display: grid; gap: 14px; align-content: start; }
 .card {
   background: var(--cream);
   border: 1px solid var(--line);
@@ -93,8 +107,20 @@ button.primary, a.primary, button.ghost {
   align-items: center;
 }
 button.primary, a.primary { background: var(--ember); color: #1a0f08; font-weight: 700; }
-button.ghost { background: transparent; border: 1px solid var(--line); }
-form.stack, .stack { display: grid; gap: 12px; }
+button.ghost, a.back { background: transparent; border: 1px solid var(--line); }
+a.outline {
+  border-radius: 999px;
+  padding: 11px 18px;
+  background: transparent;
+  border: 1px solid var(--ember);
+  color: var(--ink);
+  font-weight: 700;
+  width: fit-content;
+  margin-bottom: 0;
+}
+a.back { margin-bottom: 18px; color: var(--ink); font-weight: 700; width: fit-content; }
+form.stack, .stack { display: grid; gap: 12px; align-content: start; }
+form.stack > button, form.stack > select { align-self: start; width: 100%; }
 label { display: grid; gap: 6px; font-size: 0.9rem; }
 input, select, textarea {
   background: white;
@@ -115,7 +141,7 @@ textarea { min-height: 90px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; }
-.split { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px; }
+.split { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px; align-items: start; }
 .check { display: flex; gap: 10px; align-items: center; }
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }

@@ -40,6 +40,24 @@ export function patternLabel(value: string | null) {
   return "Pattern not set";
 }
 
+export function clockLabel(value: string | null) {
+  if (!value) return "";
+  const [hourText, minuteText] = value.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return value;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+export function monthDayYear(value: string | null) {
+  if (!value) return "";
+  const [year, month, day] = value.slice(0, 10).split("-");
+  if (!year || !month || !day) return value;
+  return `${month}/${day}/${year}`;
+}
+
 export function formatWhen(iso: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
