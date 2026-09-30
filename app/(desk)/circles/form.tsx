@@ -1,5 +1,5 @@
 import type { Circle, Person } from "@/lib/db";
-import { TIMEZONES, WEEKDAYS, WINDOWS } from "@/lib/time";
+import { TIMEZONES, WEEKDAYS, WINDOWS, monthDayYear } from "@/lib/time";
 
 function clockValue(value: string | null) {
   return value ? value.slice(0, 5) : "";
@@ -77,12 +77,12 @@ export function CircleForm({
       </label>
       <label>
         Season starts
-        <input name="season_start" type="date" required defaultValue={circle?.season_start?.slice(0, 10) ?? ""} />
+        <input name="season_start" required inputMode="numeric" autoComplete="off" placeholder="MM/DD/YYYY" defaultValue={monthDayYear(circle?.season_start ?? null)} />
       </label>
       <label>
         Season ends
-        <input name="season_end" type="date" required defaultValue={circle?.season_end?.slice(0, 10) ?? ""} />
-        <span className="meta">End date has to be after the start. A season that runs into winter uses the next year.</span>
+        <input name="season_end" required inputMode="numeric" autoComplete="off" placeholder="MM/DD/YYYY" defaultValue={monthDayYear(circle?.season_end ?? null)} />
+        <span className="meta">Use MM/DD/YYYY. End date has to be after the start. A season that runs into winter uses the next year.</span>
       </label>
       <label>
         Facilitator

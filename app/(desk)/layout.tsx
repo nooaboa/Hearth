@@ -1,13 +1,7 @@
-import Link from "next/link";
 import { logout } from "@/lib/actions";
+import { DeskNav } from "./nav";
 
 export const dynamic = "force-dynamic";
-
-const links = [
-  { href: "/", label: "Next two weeks" },
-  { href: "/people", label: "People" },
-  { href: "/circles", label: "Circles" },
-];
 
 export default function DeskLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -20,13 +14,7 @@ export default function DeskLayout({ children }: { children: React.ReactNode }) 
             <small>Circle desk</small>
           </div>
         </div>
-        <nav>
-          {links.map((link) => (
-            <Link key={link.href} className="item" href={link.href}>
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <DeskNav />
         <form action={logout} style={{ marginTop: 28 }}>
           <button className="link" type="submit">
             Sign out

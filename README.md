@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hearth operator desk
 
-## Getting Started
+Staff UI for Hearth circles. It reads and writes Supabase, and it starts n8n webhooks for launch, season invites, moving a meeting, dropping a member, and attendance.
 
-First, run the development server:
+The system around this app (workflows, tables, what is actually live) is documented in `../HEARTH_AS_BUILT.md`. That file is not in this git repo. This repo is the desk only: `https://github.com/Smew-AI/Hearth`.
+
+## Run locally
 
 ```bash
+cp .env.example .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open the URL Next prints. Sign in with `OPERATOR_PASSWORD`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Required | Role |
+| --- | --- | --- |
+| `SUPABASE_URL` | yes | `https://dpeepkctugwabdgxlbmu.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | Desk uses the service role and bypasses RLS. |
+| `OPERATOR_PASSWORD` | yes | Cookie `hearth_operator` is an HMAC of this password. |
+| `N8N_WEBHOOK_BASE` | no | Defaults to `https://n8n.srv922487.hstgr.cloud/webhook`. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+If the Supabase variables are missing, the home page shows a setup message and does not query.
 
-## Learn More
+## What the screens do
 
-To learn more about Next.js, take a look at the following resources:
+- **Home.** Meetings in the next two weeks, with who is in, out, or quiet.
+- **Circles.** Create a circle (the form saves it as confirmed and adds the host to the roster). The pen reopens that form. Launch calls `hearth-launch-circle` for a new circle and `hearth-season-invites` for an existing one. The page polls for meetings for 90 seconds. The banner means n8n accepted the webhook, which happens before calendar work finishes.
+- **People.** Member overview. Edit a person, record SMS consent (disclosure text is required), or delete them from a confirmation page.
+- **Meeting.** Move one meeting, or record who was there.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+A 404 from n8n is shown as “n8n has no active webhook for this yet.” Season invites and attendance are still in that state. Publish the workflow in n8n before expecting the button to do the work.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+There is no deploy target in this repo.

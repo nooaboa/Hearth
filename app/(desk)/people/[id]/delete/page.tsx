@@ -17,7 +17,7 @@ export default async function DeletePersonPage({ params }: { params: Promise<{ i
       <p className="kicker">Delete member</p>
       <h1>{person.full_name}</h1>
       <p className="lede">
-        This removes {person.full_name} from every circle and deletes their records. This cannot be undone.
+        This removes {person.full_name} from every circle and deletes their records, including signed agreements. This cannot be undone.
       </p>
       <form className="row" action={deletePerson} style={{ justifyContent: "flex-start", alignItems: "center" }}>
         <input type="hidden" name="person_id" value={person.id} />

@@ -55,18 +55,69 @@ export function monthDayYear(value: string | null) {
   if (!value) return "";
   const [year, month, day] = value.slice(0, 10).split("-");
   if (!year || !month || !day) return value;
-  return `${month}/${day}/${year}`;
+  return `${month.padStart(2, "0")}/${day.padStart(2, "0")}/${year}`;
 }
 
-export function formatWhen(iso: string, timeZone: string) {
+function calendarIso(year: number, month: number, day: number) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const check = new Date(`${iso}T00:00:00Z`);
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() + 1 !== month || check.getUTCDate() !== day) return null;
+  return iso;
+}
+
+export function parseUsDate(value: string) {
+  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  return calendarIso(Number(match[3]), Number(match[1]), Number(match[2]));
+}
+
+export function parseUsDateTimeLocal(value: string) {
+  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/);
+  if (!match) return null;
+  const date = calendarIso(Number(match[3]), Number(match[1]), Number(match[2]));
+  if (!date) return null;
+  let hour = Number(match[4]);
+  const minute = Number(match[5]);
+  if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+  const period = match[6].toUpperCase();
+  if (period === "AM") hour = hour === 12 ? 0 : hour;
+  else hour = hour === 12 ? 12 : hour + 12;
+  return `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function zonedParts(iso: string, timeZone: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
     weekday: "short",
-    month: "short",
-    day: "numeric",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(iso));
+    hour12: true,
+  }).formatToParts(date);
+}
+
+function readPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) {
+  return parts.find((part) => part.type === type)?.value ?? "";
+}
+
+export function formatWhen(iso: string, timeZone: string) {
+  const parts = zonedParts(iso, timeZone);
+  if (!parts) return iso;
+  const period = readPart(parts, "dayPeriod");
+  return `${readPart(parts, "weekday")}, ${readPart(parts, "month")}/${readPart(parts, "day")}/${readPart(parts, "year")}, ${readPart(parts, "hour")}:${readPart(parts, "minute")}${period ? ` ${period}` : ""}`;
+}
+
+export function usDateTimeInput(iso: string, timeZone: string) {
+  const parts = zonedParts(iso, timeZone);
+  if (!parts) return "";
+  const period = readPart(parts, "dayPeriod");
+  return `${readPart(parts, "month")}/${readPart(parts, "day")}/${readPart(parts, "year")}, ${readPart(parts, "hour")}:${readPart(parts, "minute")}${period ? ` ${period}` : ""}`;
 }
 
 export function localInputToUtc(local: string, timeZone: string) {
@@ -86,20 +137,6 @@ export function localInputToUtc(local: string, timeZone: string) {
   const read = (type: string) => Number(parts.find((part) => part.type === type)?.value);
   const rendered = Date.UTC(read("year"), read("month") - 1, read("day"), read("hour"), read("minute"));
   return new Date(guess.getTime() - (rendered - guess.getTime())).toISOString();
-}
-
-export function toLocalInput(iso: string, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(new Date(iso));
-  const read = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
-  return `${read("year")}-${read("month")}-${read("day")}T${read("hour")}:${read("minute")}`;
 }
 
 export const TOUCH_LABELS: Record<string, string> = {

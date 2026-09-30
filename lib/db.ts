@@ -1,9 +1,13 @@
+import { CONTACT_SELECT, type Contact } from "./contacts";
+
 export type Person = {
   id: number;
   full_name: string;
-  email: string;
+  email: string | null;
   phone: string | null;
 };
+
+export type { Contact };
 
 export type Circle = {
   id: number;
@@ -71,6 +75,18 @@ export type Consent = {
   disclosure_text: string | null;
 };
 
+export type MemberFile = {
+  id: number;
+  person_id: number;
+  kind: "membership_agreement" | "leadership_agreement";
+  file_name: string;
+  storage_path: string;
+  content_type: string;
+  byte_size: number;
+  signed_on: string | null;
+  uploaded_at: string;
+};
+
 export type Feedback = {
   id: number;
   person_id: number;
@@ -79,6 +95,22 @@ export type Feedback = {
   answers: Record<string, unknown>;
   submitted_at: string;
   season_key: string | null;
+};
+
+export type AttendanceReport = {
+  id: number;
+  meeting_id: number;
+  facilitator_id: number | null;
+  notes: string | null;
+  submitted_at: string;
+  updated_at: string;
+};
+
+export type AttendanceMark = {
+  id: number;
+  report_id: number;
+  person_id: number;
+  present: boolean;
 };
 
 function config() {
@@ -123,6 +155,10 @@ async function rest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const db = {
   people: () => rest<Person[]>("people?select=id,full_name,email,phone&order=full_name.asc"),
+  contacts: () =>
+    rest<Contact[]>(`people?select=${CONTACT_SELECT}&order=full_name.asc`, {
+      headers: { Range: "0-1999" },
+    }),
   person: (id: number) =>
     rest<Person[]>(`people?id=eq.${id}&select=id,full_name,email,phone`).then((rows) => rows[0] ?? null),
   circles: () =>
@@ -143,8 +179,14 @@ export const db = {
     if (!ids.length) return Promise.resolve([] as Rsvp[]);
     return rest<Rsvp[]>(`rsvps?meeting_id=in.(${ids.join(",")})&select=*`);
   },
+  sends: () => rest<Send[]>("sends?select=*&order=sent_at.desc"),
   sendsForMeeting: (meetingId: number) =>
     rest<Send[]>(`sends?meeting_id=eq.${meetingId}&select=*&order=sent_at.desc`),
+  memberFiles: () => rest<Pick<MemberFile, "person_id" | "kind">[]>("member_files?select=person_id,kind"),
+  filesForPerson: (personId: number) =>
+    rest<MemberFile[]>(`member_files?person_id=eq.${personId}&select=*&order=uploaded_at.desc`),
+  memberFile: (personId: number, fileId: number) =>
+    rest<MemberFile[]>(`member_files?id=eq.${fileId}&person_id=eq.${personId}&select=*`).then((rows) => rows[0] ?? null),
   consentForPerson: (personId: number) =>
     rest<Consent[]>(
       `consent_events?person_id=eq.${personId}&select=person_id,channel,event,occurred_at,disclosure_text&order=occurred_at.desc`,
@@ -153,6 +195,22 @@ export const db = {
   emailOptOuts: () => rest<{ person_id: number }[]>("email_opted_out?select=person_id"),
   feedbackForMeeting: (meetingId: number) =>
     rest<Feedback[]>(`feedback_responses?meeting_id=eq.${meetingId}&select=*&order=submitted_at.desc`),
+  attendanceMarks: (personId?: number) => {
+    const filter = personId ? `&person_id=eq.${personId}` : "";
+    return rest<AttendanceMark[]>(`attendance_marks?select=*${filter}&order=id.asc`);
+  },
+  attendanceMarksForReport: (reportId: number) =>
+    rest<AttendanceMark[]>(`attendance_marks?report_id=eq.${reportId}&select=*&order=id.asc`),
+  attendanceReportForMeeting: (meetingId: number) =>
+    rest<AttendanceReport[]>(`attendance_reports?meeting_id=eq.${meetingId}&select=*`).then((rows) => rows[0] ?? null),
+  attendanceReportsByIds: (ids: number[]) => {
+    if (!ids.length) return Promise.resolve([] as AttendanceReport[]);
+    return rest<AttendanceReport[]>(`attendance_reports?id=in.(${ids.join(",")})&select=*`);
+  },
+  meetingsByIds: (ids: number[]) => {
+    if (!ids.length) return Promise.resolve([] as Meeting[]);
+    return rest<Meeting[]>(`meetings?id=in.(${ids.join(",")})&select=*`);
+  },
   insert: <T>(table: string, body: unknown) =>
     rest<T[]>(table, { method: "POST", body: JSON.stringify(body) }).then((rows) => rows[0]),
   updatePerson: (id: number, body: unknown) =>

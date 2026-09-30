@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { moveMeeting, saveAttendance } from "@/lib/actions";
+import { relationFor } from "@/lib/attendance";
 import { databaseReady, db } from "@/lib/db";
-import { TOUCH_LABELS, formatWhen, toLocalInput } from "@/lib/time";
+import { TOUCH_LABELS, formatWhen, usDateTimeInput } from "@/lib/time";
 
 export default async function MeetingPage({
   params,
@@ -19,13 +20,15 @@ export default async function MeetingPage({
   const circle = await db.circle(meeting.circle_id);
   if (!circle) notFound();
   const zone = circle.timezone || "America/New_York";
-  const [members, people, rsvps, sends, feedback] = await Promise.all([
+  const [members, people, rsvps, sends, feedback, report] = await Promise.all([
     db.members(circle.id),
     db.people(),
     db.rsvpsForMeetings([meeting.id]),
     db.sendsForMeeting(meeting.id),
     db.feedbackForMeeting(meeting.id),
+    db.attendanceReportForMeeting(meeting.id),
   ]);
+  const marks = report ? await db.attendanceMarksForReport(report.id) : [];
   const personById = new Map(people.map((person) => [person.id, person]));
   const active = members.filter((member) => member.status === "active");
   const rsvpByPerson = new Map(rsvps.map((rsvp) => [rsvp.person_id, rsvp]));
@@ -89,20 +92,21 @@ export default async function MeetingPage({
         <div className="cards">
           <form className="card stack" action={moveMeeting}>
             <h2>Move this night</h2>
-            <p className="meta">This occurrence only. Times are in {zone}.</p>
+            <p className="meta">This occurrence only. Times are in {zone}, written as MM/DD/YYYY, h:mm AM.</p>
             <input type="hidden" name="meeting_id" value={meeting.id} />
             <input type="hidden" name="timezone" value={zone} />
             <label>
               Starts
-              <input name="starts_at" type="datetime-local" required defaultValue={toLocalInput(meeting.starts_at, zone)} />
+              <input name="starts_at" required autoComplete="off" placeholder="MM/DD/YYYY, h:mm AM" defaultValue={usDateTimeInput(meeting.starts_at, zone)} />
             </label>
             <label>
               Ends
               <input
                 name="ends_at"
-                type="datetime-local"
                 required
-                defaultValue={toLocalInput(meeting.ends_at || meeting.starts_at, zone)}
+                autoComplete="off"
+                placeholder="MM/DD/YYYY, h:mm AM"
+                defaultValue={usDateTimeInput(meeting.ends_at || meeting.starts_at, zone)}
               />
             </label>
             <label>
@@ -113,25 +117,66 @@ export default async function MeetingPage({
               Move meeting
             </button>
           </form>
-          <form className="card stack" action={saveAttendance}>
-            <h2>Who was there</h2>
-            <input type="hidden" name="meeting_id" value={meeting.id} />
-            <input type="hidden" name="facilitator_id" value={circle.facilitator_id ?? ""} />
-            {active.map((member) => (
-              <label className="check" key={member.id}>
-                <input type="hidden" name="person_id" value={member.person_id} />
-                <input type="checkbox" name={`present_${member.person_id}`} defaultChecked />
-                {personById.get(member.person_id)?.full_name}
+          {report ? (
+            <article className="card">
+              <h2>Who was there</h2>
+              <p className="meta" style={{ marginTop: 8 }}>
+                Recorded {formatWhen(report.submitted_at, zone)}
+                {report.notes?.trim() ? ` · ${report.notes.trim()}` : ""}
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Person</th>
+                    <th>There</th>
+                    <th>Reply</th>
+                    <th>Lineup</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marks.map((mark) => {
+                    const rsvp = rsvpByPerson.get(mark.person_id);
+                    const lineup = relationFor(mark.present === true, rsvp?.status ?? null);
+                    return (
+                      <tr key={mark.id}>
+                        <td>
+                          <Link href={`/people/${mark.person_id}`}>{personById.get(mark.person_id)?.full_name}</Link>
+                        </td>
+                        <td>
+                          <span className={mark.present ? "pill yes" : "pill no"}>{mark.present ? "Here" : "Away"}</span>
+                        </td>
+                        <td>{rsvp ? (rsvp.status === "yes" ? "In" : "Out") : "No reply"}</td>
+                        <td>{lineup.relationLabel}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <Link className="outline" href={`/attendance?meeting=${meeting.id}`} style={{ marginTop: 14 }}>
+                Check this night
+              </Link>
+            </article>
+          ) : (
+            <form className="card stack" action={saveAttendance}>
+              <h2>Who was there</h2>
+              <input type="hidden" name="meeting_id" value={meeting.id} />
+              <input type="hidden" name="facilitator_id" value={circle.facilitator_id ?? ""} />
+              {active.map((member) => (
+                <label className="check" key={member.id}>
+                  <input type="hidden" name="person_id" value={member.person_id} />
+                  <input type="checkbox" name={`present_${member.person_id}`} defaultChecked />
+                  {personById.get(member.person_id)?.full_name}
+                </label>
+              ))}
+              <label>
+                Note
+                <textarea name="notes" />
               </label>
-            ))}
-            <label>
-              Note
-              <textarea name="notes" />
-            </label>
-            <button className="primary" type="submit">
-              Save attendance
-            </button>
-          </form>
+              <button className="primary" type="submit">
+                Save attendance
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </>

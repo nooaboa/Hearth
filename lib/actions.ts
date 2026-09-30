@@ -1,11 +1,21 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { COOKIE, passwordMatches, sessionToken } from "./auth";
+import { CONTACT_COLUMNS } from "./contacts";
 import { db } from "./db";
+import {
+  agreementFile,
+  agreementPath,
+  isAgreementKind,
+  matchesAgreementBytes,
+  removeStoredFile,
+  uploadStoredFile,
+} from "./files";
 import { runWorkflow } from "./n8n";
-import { WINDOWS, localInputToUtc } from "./time";
+import { WINDOWS, localInputToUtc, parseUsDate, parseUsDateTimeLocal } from "./time";
 
 function text(form: FormData, key: string) {
   return String(form.get(key) ?? "").trim();
@@ -15,6 +25,21 @@ function number(form: FormData, key: string) {
   const value = Number(text(form, key));
   if (!Number.isInteger(value) || value <= 0) throw new Error(`${key} is missing.`);
   return value;
+}
+
+function phoneValue(raw: string) {
+  const phone = raw.trim();
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) throw new Error("Enter a full phone number.");
+  return phone;
+}
+
+function saveError(error: unknown) {
+  const message = error instanceof Error ? error.message : "Could not save.";
+  if (message.includes("people_email_uidx")) return "That email is already on another contact.";
+  if (message.includes("people_phone_uidx")) return "That phone is already on another contact.";
+  return message;
 }
 
 export async function login(form: FormData) {
@@ -33,14 +58,10 @@ export async function logout() {
 }
 
 export async function createPerson(form: FormData) {
-  const phone = text(form, "phone");
-  if (phone && !/^\+[1-9]\d{7,14}$/.test(phone)) {
-    throw new Error("Phone must be E.164, like +12125550100.");
-  }
   const row = await db.insert<{ id: number }>("people", {
     full_name: text(form, "full_name"),
     email: text(form, "email").toLowerCase(),
-    phone: phone || null,
+    phone: phoneValue(text(form, "phone")),
   });
   redirect(`/people/${row.id}`);
 }
@@ -49,14 +70,62 @@ export async function updatePerson(form: FormData) {
   const personId = number(form, "person_id");
   const fullName = text(form, "full_name");
   const email = text(form, "email").toLowerCase();
-  const phone = text(form, "phone");
   if (!fullName) throw new Error("Name is required.");
-  if (!email) throw new Error("Email is required.");
-  if (phone && !/^\+[1-9]\d{7,14}$/.test(phone)) {
-    throw new Error("Phone must be E.164, like +12125550100.");
-  }
-  await db.updatePerson(personId, { full_name: fullName, email, phone: phone || null });
+  await db.updatePerson(personId, {
+    full_name: fullName,
+    email: email || null,
+    phone: phoneValue(text(form, "phone")),
+  });
   redirect(`/people/${personId}`);
+}
+
+export async function updateContactField(
+  personId: number,
+  field: string,
+  value: string | string[] | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Number.isInteger(personId) || personId <= 0) return { ok: false, error: "Missing contact." };
+  const column = CONTACT_COLUMNS.find((item) => item.key === field);
+  if (!column) return { ok: false, error: "That column can't be edited." };
+  const payload: Record<string, string | string[] | null> = {};
+  if (column.kind === "tags") {
+    const tags = Array.isArray(value) ? value : [];
+    payload[field] = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+  } else if (column.kind === "date") {
+    const raw = typeof value === "string" ? value.trim() : "";
+    if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return { ok: false, error: "Use a real date." };
+    payload[field] = raw || null;
+  } else if (field === "full_name") {
+    const raw = typeof value === "string" ? value.trim() : "";
+    if (!raw) return { ok: false, error: "Name is required." };
+    payload.full_name = raw;
+  } else if (field === "phone") {
+    try {
+      payload.phone = phoneValue(typeof value === "string" ? value : "");
+    } catch (error) {
+      return { ok: false, error: saveError(error) };
+    }
+  } else {
+    const raw = typeof value === "string" ? value.trim() : "";
+    payload[field] = raw || null;
+  }
+  try {
+    await db.updatePerson(personId, payload);
+  } catch (error) {
+    return { ok: false, error: saveError(error) };
+  }
+  revalidatePath("/contacts");
+  return { ok: true };
+}
+
+export async function createBlankContact(): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  try {
+    const row = await db.insert<{ id: number }>("people", { full_name: "New contact", email: null });
+    revalidatePath("/contacts");
+    return { ok: true, id: row.id };
+  } catch (error) {
+    return { ok: false, error: saveError(error) };
+  }
 }
 
 export async function recordSmsConsent(form: FormData) {
@@ -84,10 +153,10 @@ function circleBody(form: FormData) {
   if (kind !== "new" && kind !== "existing") throw new Error("Circle kind is required.");
   const pattern = text(form, "pattern");
   if (pattern !== "week_1_3" && pattern !== "week_2_4") throw new Error("Pattern is required.");
-  const seasonStart = text(form, "season_start");
-  const seasonEnd = text(form, "season_end");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(seasonStart) || !/^\d{4}-\d{2}-\d{2}$/.test(seasonEnd)) {
-    throw new Error("Season dates must be real calendar dates.");
+  const seasonStart = parseUsDate(text(form, "season_start"));
+  const seasonEnd = parseUsDate(text(form, "season_end"));
+  if (!seasonStart || !seasonEnd) {
+    throw new Error("Season dates must be real calendar dates in MM/DD/YYYY.");
   }
   if (seasonEnd <= seasonStart) {
     throw new Error("Season end has to be after the season start. A fall-to-winter season uses the next year for the end date.");
@@ -174,8 +243,52 @@ export async function deletePerson(form: FormData) {
   await db.removeWhere("feedback_responses", `person_id=eq.${personId}`);
   await db.removeWhere("contributions", `person_id=eq.${personId}`);
   await db.removeWhere("circle_members", `person_id=eq.${personId}`);
+  const files = await db.filesForPerson(personId);
+  for (const file of files) await removeStoredFile(file.storage_path);
   await db.remove("people", personId);
   redirect("/people");
+}
+
+export async function uploadMemberFile(form: FormData) {
+  const personId = number(form, "person_id");
+  const kind = text(form, "kind");
+  if (!isAgreementKind(kind)) throw new Error("Pick a membership agreement or a leadership role agreement.");
+  const signedText = text(form, "signed_on");
+  const signedOn = signedText ? parseUsDate(signedText) : null;
+  if (signedText && !signedOn) throw new Error("Signed date must be MM/DD/YYYY.");
+  const { file, contentType, fileName } = agreementFile(form.get("file"));
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!matchesAgreementBytes(bytes, contentType)) {
+    throw new Error("That file does not match a PDF or photo. Upload the signed agreement again.");
+  }
+  const person = await db.person(personId);
+  if (!person) throw new Error("Person is missing.");
+  const storagePath = agreementPath(personId, kind, contentType);
+  await uploadStoredFile(storagePath, bytes, contentType);
+  try {
+    await db.insert("member_files", {
+      person_id: personId,
+      kind,
+      file_name: fileName,
+      storage_path: storagePath,
+      content_type: contentType,
+      byte_size: bytes.byteLength,
+      signed_on: signedOn,
+    });
+  } catch (error) {
+    await removeStoredFile(storagePath);
+    throw error;
+  }
+  redirect(`/people/${personId}`);
+}
+
+export async function deleteMemberFile(form: FormData) {
+  const personId = number(form, "person_id");
+  const file = await db.memberFile(personId, number(form, "file_id"));
+  if (!file) throw new Error("That agreement is already gone.");
+  await removeStoredFile(file.storage_path);
+  await db.remove("member_files", file.id);
+  redirect(`/people/${personId}`);
 }
 
 export async function addMember(form: FormData) {
@@ -212,10 +325,13 @@ export async function moveMeeting(form: FormData) {
   const meetingId = number(form, "meeting_id");
   const zone = text(form, "timezone");
   const location = text(form, "location");
+  const starts = parseUsDateTimeLocal(text(form, "starts_at"));
+  const ends = parseUsDateTimeLocal(text(form, "ends_at"));
+  if (!starts || !ends) throw new Error("Meeting times must look like 10/07/2026, 7:00 PM.");
   await runWorkflow("hearth-move-meeting", {
     meeting_id: meetingId,
-    starts_at: localInputToUtc(text(form, "starts_at"), zone),
-    ends_at: localInputToUtc(text(form, "ends_at"), zone),
+    starts_at: localInputToUtc(starts, zone),
+    ends_at: localInputToUtc(ends, zone),
     location,
   });
   redirect(`/meetings/${meetingId}?sent=move`);
